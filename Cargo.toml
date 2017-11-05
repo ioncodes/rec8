@@ -1,0 +1,6 @@
+[package]
+name = "rec8"
+version = "0.1.0"
+authors = ["ion <ionix@protonmail.com>"]
+
+[dependencies]
