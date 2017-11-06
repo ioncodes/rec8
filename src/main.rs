@@ -10,22 +10,17 @@ fn main() {
     match (n1, n2, n3, n4) {
         (0x0A, _, _, _) => {
             translator.emit(vec![
-                0x48,
-                0xC7,
-                0x04,
-                0x25,
-                0xFF,
-                0xFF,
-                0xFF,
-                0x0F,
+                0x48, 
+                0xC7, 
+                0x00,
                 (n2 << 4) | n3,
                 n4,
                 0x00,
                 0x00,
-            ]) // mov qword ptr [0xffffffff], 5
+            ]) // mov qword ptr [rax+0], NNN
         }
         _ => panic!("Unknow instruction: {:X}{:X}{:X}{:X}", n1, n2, n3, n4),
     }
 
-    println!("{:?}", translator.contents);
+    println!("{}", translator);
 }
