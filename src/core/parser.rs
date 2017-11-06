@@ -16,9 +16,9 @@ impl Parser {
 
     pub fn read(&mut self) -> (u8, u8, u8, u8) {
         let data = (
-            self.contents[self.pc] & 0xF0,
+            (self.contents[self.pc] & 0xF0) >> 4,
             self.contents[self.pc] & 0x0F,
-            self.contents[self.pc + 1] & 0xF0,
+            (self.contents[self.pc + 1] & 0xF0) >> 4,
             self.contents[self.pc + 1] & 0x0F,
         );
         self.pc += 2;
