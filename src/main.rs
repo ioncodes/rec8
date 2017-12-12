@@ -17,6 +17,8 @@ fn main() {
             (0x01, _, _, _) => translator.jmp(n2, n3, n4),
             (0x06, _, _, _) => translator.mov_v_addr(n2, n3, n4),
             (0x0D, _, _, _) => translator.draw(),
+            (0x08, _, _, 0x00) => translator.mov_v_v(n2, n3),
+            (0x02, _, _, _) => translator.call(n2, n3, n4),
             _ => {
                 println!("Unknow instruction: {:X}{:X}{:X}{:X}", n1, n2, n3, n4);
                 eof = true;

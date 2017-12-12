@@ -45,14 +45,7 @@ impl Translator {
     }
 
     pub fn rand_bitwise_and(&mut self, _n1: u8, _n2: u8, _n3: u8) {
-        // todo 1: implement as rust
-        // todo 2: implement as asm
-        /*
-        self.emit(vec![0x49, 0xC7, 0xC4, (n2 << 4) | n3, 0x00, 0x00, 0x00]); // mov r12, <8bit> (NN)
-        self.emit(vec![0x49, 0xC7, 0xC5, 0xFF, 0x00, 0x00, 0x00]); // mov r13, <8bit> (random number)
-        self.emit(vec![0x4D, 0x21, 0xE5]); // and r13, r12
-        self.emit(vec![0x4C, 0x89, 0x68, 24 + (n1 * 8)]); // mov qword ptr [rax+(24+(N*8))], r13
-        */
+        // todo: implement as asm
         self.emit_debug();
     }
 
@@ -68,7 +61,16 @@ impl Translator {
     }
 
     pub fn add(&mut self, n1: u8, n2: u8, n3: u8) {
-        let asm = vec![0x48, 0x81, 0x40, n1, n2 << 4 | n3, 0x00, 0x00, 0x00]; // add qword ptr [rax+(24+(X*8))], NN
+        let asm = vec![
+            0x48,
+            0x81,
+            0x40,
+            24 + (n1 * 8),
+            (n2 << 4) | n3,
+            0x00,
+            0x00,
+            0x00,
+        ]; // add qword ptr [rax+(24+(X*8))], NN
         self.emit_debug_symbols(
             asm.len(),
             format!("add qword ptr [rax+(24+(0x{:02x}*8))], 0x{}{}", n1, n2, n3),
@@ -82,12 +84,41 @@ impl Translator {
     }
 
     pub fn mov_v_addr(&mut self, n1: u8, n2: u8, n3: u8) {
-        let asm = vec![0x48, 0xC7, 0x40, n1, n2 << 4 | n3, 0x00, 0x00, 0x00]; // mov qword ptr [rax+(24+(X*8))], NN
+        let asm = vec![
+            0x48,
+            0xC7,
+            0x40,
+            24 + (n1 * 8),
+            (n2 << 4) | n3,
+            0x00,
+            0x00,
+            0x00,
+        ]; // mov qword ptr [rax+(24+(X*8))], NN
         self.emit_debug_symbols(
             asm.len(),
             format!("mov qword ptr [rax+(24+(0x{:02x}*8))], 0x{}{}", n1, n2, n3),
         );
         self.emit(asm);
+    }
+
+    pub fn mov_v_v(&mut self, n1: u8, n2: u8) {
+        let asm_0 = vec![0x4C, 0x8B, 0x60, 24 + (n2 * 8)]; // mov r12, qword ptr [rax+(24+(X*8))]
+        let asm_1 = vec![0x4C, 0x89, 0x60, 24 + (n1 * 8)]; // mov qword ptr [rax+(24+(Y*8))], r12
+        self.emit_debug_symbols(
+            asm_0.len(),
+            format!("mov r12, qword ptr [rax+(24+(0x{:02x}*8))]", n2),
+        );
+        self.emit(asm_0);
+        self.emit_debug_symbols(
+            asm_1.len(),
+            format!("mov qword ptr [rax+(24+(0x{:02x}*8))], r12", n1),
+        );
+        self.emit(asm_1);
+    }
+
+    pub fn call(&mut self, _n1: u8, _n2: u8, _n3: u8) {
+        // call / jump
+        self.emit_debug();
     }
 
     pub fn draw(&mut self) {
