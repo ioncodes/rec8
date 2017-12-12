@@ -160,10 +160,11 @@ impl Translator {
 
 impl fmt::Display for Translator {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut w = "".to_string();
+        let mut w = "0x0000: ".to_string();
         let mut i: usize = 1;
         let mut j: usize = 0;
         let mut h: usize = 0;
+        let mut k: usize = 0;
         let mut space_len: usize = 0;
         for &(_, ref length, _) in &self.debug_symbols {
             if space_len < *length {
@@ -171,6 +172,7 @@ impl fmt::Display for Translator {
             }
         }
         space_len *= 2;
+        space_len += 8;
         for byte in &self.contents {
             w.push_str(&format!("{:02X}", byte));
             let &(_, ref length, ref symbol) = &self.debug_symbols[j];
@@ -183,9 +185,13 @@ impl fmt::Display for Translator {
                 h += 1;
                 i = 0;
                 j += 1;
+                k += *length;
+                w.push_str(&format!("0x{:04x}: ", k));
             }
             i += 1;
         }
+        let len = w.len() - 8;
+        w.truncate(len);
         write!(f, "{}", w)
     }
 }
