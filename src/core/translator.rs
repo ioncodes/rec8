@@ -7,9 +7,15 @@ use std::fmt;
  * rax+24...152 = V0..VF => [rax+(24+(N*8))]
  */
 
+/*
+ * Relative jump in Keystone:
+ * je +(2+BYTES)
+ */
+
 pub struct Translator {
     pub contents: Vec<u8>,
     pub debug_symbols: Vec<(usize, usize, String)>,
+    pub create_jump: bool,
 }
 
 impl Translator {
@@ -17,6 +23,7 @@ impl Translator {
         Translator {
             contents: Vec::<u8>::new(),
             debug_symbols: Vec::<(usize, usize, String)>::new(),
+            create_jump: false,
         }
     }
 
@@ -33,6 +40,15 @@ impl Translator {
         self.debug_symbols.push(
             (self.contents.len(), length, symbol),
         );
+    }
+
+    fn process_jump(&mut self, length: usize) {
+        if self.create_jump {
+            let asm = vec![0x74, (0x02 + length) as u8]; // je 2+BYTES
+            self.emit_debug_symbols(asm.len(), format!("je 0x02+0x{:02x}", length));
+            self.emit(asm);
+            self.create_jump = false;
+        }
     }
 
     pub fn mov_i_addr(&mut self, n1: u8, n2: u8, n3: u8) {
@@ -56,8 +72,7 @@ impl Translator {
             format!("cmp qword ptr [rax+(24+(0x{:02x}*8))], 0x{}{}", n1, n2, n3),
         );
         self.emit(asm);
-        self.emit_debug();
-        // make new page
+        self.create_jump = true;
     }
 
     pub fn add(&mut self, n1: u8, n2: u8, n3: u8) {
@@ -71,6 +86,7 @@ impl Translator {
             0x00,
             0x00,
         ]; // add qword ptr [rax+(24+(X*8))], NN
+        self.process_jump(asm.len());
         self.emit_debug_symbols(
             asm.len(),
             format!("add qword ptr [rax+(24+(0x{:02x}*8))], 0x{}{}", n1, n2, n3),
@@ -79,7 +95,6 @@ impl Translator {
     }
 
     pub fn jmp(&mut self, _n1: u8, _n2: u8, _n3: u8) {
-        // new page
         self.emit_debug();
     }
 
@@ -94,6 +109,7 @@ impl Translator {
             0x00,
             0x00,
         ]; // mov qword ptr [rax+(24+(X*8))], NN
+        self.process_jump(asm.len());
         self.emit_debug_symbols(
             asm.len(),
             format!("mov qword ptr [rax+(24+(0x{:02x}*8))], 0x{}{}", n1, n2, n3),
@@ -104,6 +120,7 @@ impl Translator {
     pub fn mov_v_v(&mut self, n1: u8, n2: u8) {
         let asm_0 = vec![0x4C, 0x8B, 0x60, 24 + (n2 * 8)]; // mov r12, qword ptr [rax+(24+(X*8))]
         let asm_1 = vec![0x4C, 0x89, 0x60, 24 + (n1 * 8)]; // mov qword ptr [rax+(24+(Y*8))], r12
+        self.process_jump(asm_0.len() + asm_1.len());
         self.emit_debug_symbols(
             asm_0.len(),
             format!("mov r12, qword ptr [rax+(24+(0x{:02x}*8))]", n2),
