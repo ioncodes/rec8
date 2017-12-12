@@ -15,6 +15,8 @@ use std::fmt;
 pub struct Translator {
     pub contents: Vec<u8>,
     pub debug_symbols: Vec<(usize, usize, String)>,
+    pub index: Vec<(usize, usize)>,
+    pub index_pointer: usize,
     pub create_jump: bool,
 }
 
@@ -23,15 +25,18 @@ impl Translator {
         Translator {
             contents: Vec::<u8>::new(),
             debug_symbols: Vec::<(usize, usize, String)>::new(),
+            index: Vec::<(usize, usize)>::new(),
+            index_pointer: 0,
             create_jump: false,
         }
     }
 
-    pub fn emit(&mut self, bytes: Vec<u8>) {
+    fn emit(&mut self, bytes: Vec<u8>) {
         self.contents.extend(bytes);
     }
 
     fn emit_debug(&mut self) {
+        self.create_index();
         self.emit_debug_symbols(16, "DEBUG!".to_string());
         self.emit(vec![0xFF; 16]);
     }
@@ -49,6 +54,14 @@ impl Translator {
             self.emit(asm);
             self.create_jump = false;
         }
+    }
+
+    pub fn create_index(&mut self) {
+        self.index.push((self.index_pointer, self.contents.len()));
+    }
+
+    pub fn increment_index_pointer(&mut self) {
+        self.index_pointer += 1;
     }
 
     pub fn mov_i_addr(&mut self, n1: u8, n2: u8, n3: u8) {
@@ -150,6 +163,7 @@ impl fmt::Display for Translator {
         let mut w = "".to_string();
         let mut i: usize = 1;
         let mut j: usize = 0;
+        let mut h: usize = 0;
         let mut space_len: usize = 0;
         for &(_, ref length, _) in &self.debug_symbols {
             if space_len < *length {
@@ -157,15 +171,16 @@ impl fmt::Display for Translator {
             }
         }
         space_len *= 2;
-        space_len += 10; // margin
         for byte in &self.contents {
             w.push_str(&format!("{:02X}", byte));
             let &(_, ref length, ref symbol) = &self.debug_symbols[j];
             if i == *length {
-                for _ in 0..space_len - (*length * 2) {
+                for _ in 0..space_len + 5 - (*length * 2) {
                     w.push(' ');
                 }
-                w.push_str(&format!(" => {}\n", symbol));
+                w.push_str(&format!(" => {}", symbol));
+                w.push_str(&format!(" @ {}|{}\n", self.index[h].0, self.index[h].1));
+                h += 1;
                 i = 0;
                 j += 1;
             }
