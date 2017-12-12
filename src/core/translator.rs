@@ -177,7 +177,7 @@ impl fmt::Display for Translator {
             w.push_str(&format!("{:02X}", byte));
             let &(_, ref length, ref symbol) = &self.debug_symbols[j];
             if i == *length {
-                for _ in 0..space_len + 5 - (*length * 2) {
+                for _ in 0..space_len - (*length * 2) {
                     w.push(' ');
                 }
                 w.push_str(&format!(" => {}", symbol));
