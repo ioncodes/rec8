@@ -60,7 +60,7 @@ impl Translator {
         let asm = vec![0x48, 0x83, 0x78, 24 + (n1 * 8), (n2 << 4) | n3]; // cmp qword ptr [rax+(24+(X*8))], NN
         self.emit_debug_symbols(
             asm.len(),
-            format!("cmp qword ptr [rax+(24+(0x{}*8))], 0x{}{}", n1, n2, n3),
+            format!("cmp qword ptr [rax+(24+(0x{:02x}*8))], 0x{}{}", n1, n2, n3),
         );
         self.emit(asm);
         self.emit_debug();
@@ -71,7 +71,7 @@ impl Translator {
         let asm = vec![0x48, 0x81, 0x40, n1, n2 << 4 | n3, 0x00, 0x00, 0x00]; // add qword ptr [rax+(24+(X*8))], NN
         self.emit_debug_symbols(
             asm.len(),
-            format!("add qword ptr [rax+(24+(0x{}*8))], 0x{}{}", n1, n2, n3),
+            format!("add qword ptr [rax+(24+(0x{:02x}*8))], 0x{}{}", n1, n2, n3),
         );
         self.emit(asm);
     }
@@ -85,7 +85,7 @@ impl Translator {
         let asm = vec![0x48, 0xC7, 0x40, n1, n2 << 4 | n3, 0x00, 0x00, 0x00]; // mov qword ptr [rax+(24+(X*8))], NN
         self.emit_debug_symbols(
             asm.len(),
-            format!("mov qword ptr [rax+(24+(0x{}*8))], 0x{}{}", n1, n2, n3),
+            format!("mov qword ptr [rax+(24+(0x{:02x}*8))], 0x{}{}", n1, n2, n3),
         );
         self.emit(asm);
     }
@@ -100,21 +100,29 @@ impl Translator {
 impl fmt::Display for Translator {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut w = "".to_string();
-        let mut i: usize = 0;
+        let mut i: usize = 1;
         let mut j: usize = 0;
+        let mut space_len: usize = 0;
+        for &(_, ref length, _) in &self.debug_symbols {
+            if space_len < *length {
+                space_len = *length;
+            }
+        }
+        space_len *= 2;
+        space_len += 10; // margin
         for byte in &self.contents {
-            w.push_str(&format!("{:02X} ", byte));
-            let &(ref position, ref length, ref symbol) = &self.debug_symbols[j];
+            w.push_str(&format!("{:02X}", byte));
+            let &(_, ref length, ref symbol) = &self.debug_symbols[j];
             if i == *length {
-                w.push_str(&format!("\t => {}\n", symbol));
+                for _ in 0..space_len - (*length * 2) {
+                    w.push(' ');
+                }
+                w.push_str(&format!(" => {}\n", symbol));
                 i = 0;
                 j += 1;
             }
             i += 1;
         }
-        let len = w.len() - 1;
-        w.truncate(len);
-        // w.push_str(" ]");
         write!(f, "{}", w)
     }
 }
