@@ -74,6 +74,15 @@ impl Translator {
         *self.instruction_list.last_mut().unwrap() += 2;
     }
 
+    fn get_x64_address(&self, address: u16) -> u16 {
+        let amount_instructions = ((address - 0x200) / 2) as usize;
+        let mut x64_addr = 0;
+        for i in 0..amount_instructions {
+            x64_addr += self.instruction_list[i] as u16;
+        }
+        x64_addr
+    }
+
     pub fn mov_i_addr(&mut self, n1: u8, n2: u8, n3: u8) {
         let asm = vec![0x48, 0xC7, 0x00, (n1 << 4) | n2, n3, 0x00, 0x00]; // mov qword ptr [rax+0], NNN
         let len = asm.len();
@@ -122,11 +131,8 @@ impl Translator {
     }
 
     pub fn jmp(&mut self, n1: u8, n2: u8, n3: u8) {
-        let amount_instructions = ((self.parse_addr(n1, n2, n3) - 0x200) / 2) as usize;
-        let mut addr = 0;
-        for i in 0..amount_instructions {
-            addr += self.instruction_list[i] as u16;
-        }
+        let address = self.parse_addr(n1, n2, n3);
+        let addr = self.get_x64_address(address);
         let asm_0 = vec![0x67, 0x4C, 0x8B, 0x23]; // mov r12, qword ptr [ebx]
         let asm_1 = vec![
             0x49,
@@ -189,13 +195,28 @@ impl Translator {
     }
 
     pub fn call(&mut self, n1: u8, n2: u8, n3: u8) {
-        // call / jump
+        let address = self.parse_addr(n1, n2, n3);
+        if address < 0x200 {
+            println!(
+                "Call to weird location found: 0x{:04x}. Ignoring...",
+                address
+            );
+            return;
+        }
+        let addr = self.get_x64_address(address);
         let asm_0 = vec![0x68, 0x00, 0x00, 0x00, 0x00]; // push .
         let asm_1 = vec![0x67, 0x4C, 0x8B, 0x23]; // mov r12, qword ptr [ebx]
-        let asm_2 = vec![0x49, 0x81, 0xC4, 0xFB, 0xFA, 0x00, 0x00]; // add r12, NNN
+        let asm_2 = vec![
+            0x49,
+            0x81,
+            0xC4,
+            self.get_byte(addr, 0),
+            self.get_byte(addr, 1),
+            0x00,
+            0x00,
+        ]; // add r12, NNN
         let asm_3 = vec![0x41, 0xFF, 0xE4]; // jmp r12
         let len = asm_0.len() + asm_1.len() + asm_2.len() + asm_3.len();
-        let addr = self.parse_addr(n1, n2, n3);
         self.process_jump(len);
         self.emit_debug_symbols(asm_0.len(), "push .".to_string());
         self.emit(asm_0);
