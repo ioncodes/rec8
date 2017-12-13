@@ -136,7 +136,7 @@ impl Translator {
             self.get_byte(addr, 1),
             0x00,
             0x00,
-        ]; // add r12, [addr.1][addr.0]
+        ]; // add r12, NNN
         let asm_2 = vec![0x41, 0xFF, 0xE4]; // jmp r12
         let len = asm_0.len() + asm_1.len() + asm_2.len();
         self.process_jump(asm_0.len() + asm_1.len() + asm_2.len());
@@ -174,7 +174,7 @@ impl Translator {
         let asm_0 = vec![0x4C, 0x8B, 0x60, 24 + (n2 * 8)]; // mov r12, qword ptr [rax+(24+(X*8))]
         let asm_1 = vec![0x4C, 0x89, 0x60, 24 + (n1 * 8)]; // mov qword ptr [rax+(24+(Y*8))], r12
         let len = asm_0.len() + asm_1.len();
-        self.process_jump(asm_0.len() + asm_1.len());
+        self.process_jump(len);
         self.emit_debug_symbols(
             asm_0.len(),
             format!("mov r12, qword ptr [rax+(24+(0x{:02x}*8))]", n2),
@@ -188,9 +188,24 @@ impl Translator {
         self.cache_size(len);
     }
 
-    pub fn call(&mut self, _n1: u8, _n2: u8, _n3: u8) {
+    pub fn call(&mut self, n1: u8, n2: u8, n3: u8) {
         // call / jump
-        self.emit_debug("CALL".to_string());
+        let asm_0 = vec![0x68, 0x00, 0x00, 0x00, 0x00]; // push .
+        let asm_1 = vec![0x67, 0x4C, 0x8B, 0x23]; // mov r12, qword ptr [ebx]
+        let asm_2 = vec![0x49, 0x81, 0xC4, 0xFB, 0xFA, 0x00, 0x00]; // add r12, NNN
+        let asm_3 = vec![0x41, 0xFF, 0xE4]; // jmp r12
+        let len = asm_0.len() + asm_1.len() + asm_2.len() + asm_3.len();
+        let addr = self.parse_addr(n1, n2, n3);
+        self.process_jump(len);
+        self.emit_debug_symbols(asm_0.len(), "push .".to_string());
+        self.emit(asm_0);
+        self.emit_debug_symbols(asm_1.len(), "mov r12, qword ptr [ebx]".to_string());
+        self.emit(asm_1);
+        self.emit_debug_symbols(asm_2.len(), format!("add r12, 0x{:04x}", addr));
+        self.emit(asm_2);
+        self.emit_debug_symbols(asm_3.len(), "jmp r12".to_string());
+        self.emit(asm_3);
+        self.cache_size(len);
     }
 
     pub fn draw(&mut self) {
