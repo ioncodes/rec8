@@ -35,9 +35,10 @@ impl Translator {
         self.contents.extend(bytes);
     }
 
-    fn emit_debug(&mut self) {
+    fn emit_debug(&mut self, asm: String) {
         self.create_index();
-        self.emit_debug_symbols(16, "DEBUG!".to_string());
+        self.process_jump(16);
+        self.emit_debug_symbols(16, asm);
         self.emit(vec![0xFF; 16]);
     }
 
@@ -49,6 +50,7 @@ impl Translator {
 
     fn process_jump(&mut self, length: usize) {
         if self.create_jump {
+            self.create_index();
             let asm = vec![0x74, (0x02 + length) as u8]; // je 2+BYTES
             self.emit_debug_symbols(asm.len(), format!("je 0x02+0x{:02x}", length));
             self.emit(asm);
@@ -66,6 +68,7 @@ impl Translator {
 
     pub fn mov_i_addr(&mut self, n1: u8, n2: u8, n3: u8) {
         let asm = vec![0x48, 0xC7, 0x00, (n1 << 4) | n2, n3, 0x00, 0x00]; // mov qword ptr [rax+0], NNN
+        self.process_jump(asm.len());
         self.emit_debug_symbols(
             asm.len(),
             format!("mov qword ptr [rax+0], 0x{}{}{}", n1, n2, n3),
@@ -75,7 +78,7 @@ impl Translator {
 
     pub fn rand_bitwise_and(&mut self, _n1: u8, _n2: u8, _n3: u8) {
         // todo: implement as asm
-        self.emit_debug();
+        self.emit_debug("RND".to_string());
     }
 
     pub fn je(&mut self, n1: u8, n2: u8, n3: u8) {
@@ -108,7 +111,7 @@ impl Translator {
     }
 
     pub fn jmp(&mut self, _n1: u8, _n2: u8, _n3: u8) {
-        self.emit_debug();
+        self.emit_debug("JMP".to_string());
     }
 
     pub fn mov_v_addr(&mut self, n1: u8, n2: u8, n3: u8) {
@@ -148,12 +151,12 @@ impl Translator {
 
     pub fn call(&mut self, _n1: u8, _n2: u8, _n3: u8) {
         // call / jump
-        self.emit_debug();
+        self.emit_debug("CALL".to_string());
     }
 
     pub fn draw(&mut self) {
         // draw
-        self.emit_debug();
+        self.emit_debug("DRW".to_string());
     }
 }
 
