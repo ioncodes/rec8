@@ -5,7 +5,6 @@ use std::fmt;
  * rax+8 = DT
  * rax+16 = ST
  * rax+24...152 = V0..VF => [rax+(24+(N*8))]
- * rax+160... = MEMORY
  * rbx = memory page base address
  */
 
@@ -51,7 +50,7 @@ impl Translator {
     fn process_jump(&mut self, length: usize) {
         if self.create_jump {
             let asm = vec![0x74, (0x02 + length) as u8]; // je 2+BYTES
-            self.emit_debug_symbols(asm.len(), format!("je 0x02+0x{:02x}", length));
+            self.emit_debug_symbols(asm.len(), format!("je 0x{:02x}", 0x02 + length));
             self.emit(asm);
             self.create_jump = false;
             self.fix_jump_cache();

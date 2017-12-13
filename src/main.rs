@@ -2,6 +2,8 @@ mod core;
 
 use core::translator::Translator;
 use core::parser::Parser;
+use std::fs::File;
+use std::io::prelude::*;
 
 fn main() {
     let mut parser = Parser::new("roms/MAZE".to_string());
@@ -27,4 +29,7 @@ fn main() {
     }
 
     println!("{}", translator);
+
+    let mut file = File::create("MAZE.bin").unwrap();
+    let _ = file.write_all(&translator.contents);
 }
