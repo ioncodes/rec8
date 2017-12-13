@@ -5,6 +5,8 @@ use std::fmt;
  * rax+8 = DT
  * rax+16 = ST
  * rax+24...152 = V0..VF => [rax+(24+(N*8))]
+ * rax+160... = MEMORY
+ * rbx = memory page base address
  */
 
 /*
@@ -15,9 +17,8 @@ use std::fmt;
 pub struct Translator {
     pub contents: Vec<u8>,
     pub debug_symbols: Vec<(usize, usize, String)>,
-    pub index: Vec<(usize, usize)>,
-    pub index_pointer: usize,
     pub create_jump: bool,
+    pub instruction_list: Vec<usize>,
 }
 
 impl Translator {
@@ -25,9 +26,8 @@ impl Translator {
         Translator {
             contents: Vec::<u8>::new(),
             debug_symbols: Vec::<(usize, usize, String)>::new(),
-            index: Vec::<(usize, usize)>::new(),
-            index_pointer: 0,
             create_jump: false,
+            instruction_list: Vec::<usize>::new(),
         }
     }
 
@@ -36,10 +36,10 @@ impl Translator {
     }
 
     fn emit_debug(&mut self, asm: String) {
-        self.create_index();
         self.process_jump(16);
         self.emit_debug_symbols(16, asm);
         self.emit(vec![0xFF; 16]);
+        self.cache_size(16);
     }
 
     fn emit_debug_symbols(&mut self, length: usize, symbol: String) {
@@ -50,30 +50,37 @@ impl Translator {
 
     fn process_jump(&mut self, length: usize) {
         if self.create_jump {
-            self.create_index();
             let asm = vec![0x74, (0x02 + length) as u8]; // je 2+BYTES
             self.emit_debug_symbols(asm.len(), format!("je 0x02+0x{:02x}", length));
             self.emit(asm);
             self.create_jump = false;
+            self.fix_jump_cache();
         }
     }
 
-    pub fn create_index(&mut self) {
-        self.index.push((self.index_pointer, self.contents.len()));
+    fn parse_addr(&self, n1: u8, n2: u8, n3: u8) -> u16 {
+        (((n1 as u16) << 8) | ((n2 << 4) | n3) as u16) as u16
     }
 
-    pub fn increment_index_pointer(&mut self) {
-        self.index_pointer += 1;
+    fn get_byte(&self, bytes: u16, position: usize) -> u8 {
+        ((bytes >> 8 * position) & 0xFF) as u8
+    }
+
+    fn cache_size(&mut self, size: usize) {
+        self.instruction_list.push(size);
+    }
+
+    fn fix_jump_cache(&mut self) {
+        *self.instruction_list.last_mut().unwrap() += 2;
     }
 
     pub fn mov_i_addr(&mut self, n1: u8, n2: u8, n3: u8) {
         let asm = vec![0x48, 0xC7, 0x00, (n1 << 4) | n2, n3, 0x00, 0x00]; // mov qword ptr [rax+0], NNN
+        let len = asm.len();
         self.process_jump(asm.len());
-        self.emit_debug_symbols(
-            asm.len(),
-            format!("mov qword ptr [rax+0], 0x{}{}{}", n1, n2, n3),
-        );
+        self.emit_debug_symbols(len, format!("mov qword ptr [rax+0], 0x{}{}{}", n1, n2, n3));
         self.emit(asm);
+        self.cache_size(len);
     }
 
     pub fn rand_bitwise_and(&mut self, _n1: u8, _n2: u8, _n3: u8) {
@@ -83,12 +90,14 @@ impl Translator {
 
     pub fn je(&mut self, n1: u8, n2: u8, n3: u8) {
         let asm = vec![0x48, 0x83, 0x78, 24 + (n1 * 8), (n2 << 4) | n3]; // cmp qword ptr [rax+(24+(X*8))], NN
+        let len = asm.len();
         self.emit_debug_symbols(
-            asm.len(),
+            len,
             format!("cmp qword ptr [rax+(24+(0x{:02x}*8))], 0x{}{}", n1, n2, n3),
         );
         self.emit(asm);
         self.create_jump = true;
+        self.cache_size(len);
     }
 
     pub fn add(&mut self, n1: u8, n2: u8, n3: u8) {
@@ -102,16 +111,42 @@ impl Translator {
             0x00,
             0x00,
         ]; // add qword ptr [rax+(24+(X*8))], NN
+        let len = asm.len();
         self.process_jump(asm.len());
         self.emit_debug_symbols(
-            asm.len(),
+            len,
             format!("add qword ptr [rax+(24+(0x{:02x}*8))], 0x{}{}", n1, n2, n3),
         );
         self.emit(asm);
+        self.cache_size(len);
     }
 
-    pub fn jmp(&mut self, _n1: u8, _n2: u8, _n3: u8) {
-        self.emit_debug("JMP".to_string());
+    pub fn jmp(&mut self, n1: u8, n2: u8, n3: u8) {
+        let amount_instructions = ((self.parse_addr(n1, n2, n3) - 0x200) / 2) as usize;
+        let mut addr = 0;
+        for i in 0..amount_instructions {
+            addr += self.instruction_list[i] as u16;
+        }
+        let asm_0 = vec![0x67, 0x4C, 0x8B, 0x23]; // mov r12, qword ptr [ebx]
+        let asm_1 = vec![
+            0x49,
+            0x81,
+            0xC4,
+            self.get_byte(addr, 0),
+            self.get_byte(addr, 1),
+            0x00,
+            0x00,
+        ]; // add r12, [addr.1][addr.0]
+        let asm_2 = vec![0x41, 0xFF, 0xE4]; // jmp r12
+        let len = asm_0.len() + asm_1.len() + asm_2.len();
+        self.process_jump(asm_0.len() + asm_1.len() + asm_2.len());
+        self.emit_debug_symbols(asm_0.len(), "mov r12, qword ptr [ebx]".to_string());
+        self.emit(asm_0);
+        self.emit_debug_symbols(asm_1.len(), format!("add r12, 0x{:04x}", addr));
+        self.emit(asm_1);
+        self.emit_debug_symbols(asm_2.len(), "jmp r12".to_string());
+        self.emit(asm_2);
+        self.cache_size(len);
     }
 
     pub fn mov_v_addr(&mut self, n1: u8, n2: u8, n3: u8) {
@@ -125,17 +160,20 @@ impl Translator {
             0x00,
             0x00,
         ]; // mov qword ptr [rax+(24+(X*8))], NN
-        self.process_jump(asm.len());
+        let len = asm.len();
+        self.process_jump(len);
         self.emit_debug_symbols(
-            asm.len(),
+            len,
             format!("mov qword ptr [rax+(24+(0x{:02x}*8))], 0x{}{}", n1, n2, n3),
         );
         self.emit(asm);
+        self.cache_size(len);
     }
 
     pub fn mov_v_v(&mut self, n1: u8, n2: u8) {
         let asm_0 = vec![0x4C, 0x8B, 0x60, 24 + (n2 * 8)]; // mov r12, qword ptr [rax+(24+(X*8))]
         let asm_1 = vec![0x4C, 0x89, 0x60, 24 + (n1 * 8)]; // mov qword ptr [rax+(24+(Y*8))], r12
+        let len = asm_0.len() + asm_1.len();
         self.process_jump(asm_0.len() + asm_1.len());
         self.emit_debug_symbols(
             asm_0.len(),
@@ -147,6 +185,7 @@ impl Translator {
             format!("mov qword ptr [rax+(24+(0x{:02x}*8))], r12", n1),
         );
         self.emit(asm_1);
+        self.cache_size(len);
     }
 
     pub fn call(&mut self, _n1: u8, _n2: u8, _n3: u8) {
@@ -166,7 +205,6 @@ impl fmt::Display for Translator {
         let mut w = "0x0000: ".to_string();
         let mut i: usize = 1;
         let mut j: usize = 0;
-        let mut h: usize = 0;
         let mut k: usize = 0;
         let mut space_len: usize = 0;
         for &(_, ref length, _) in &self.debug_symbols {
@@ -183,9 +221,7 @@ impl fmt::Display for Translator {
                 for _ in 0..space_len - (*length * 2) {
                     w.push(' ');
                 }
-                w.push_str(&format!(" => {}", symbol));
-                w.push_str(&format!(" @ {}|{}\n", self.index[h].0, self.index[h].1));
-                h += 1;
+                w.push_str(&format!(" => {}\n", symbol));
                 i = 0;
                 j += 1;
                 k += *length;

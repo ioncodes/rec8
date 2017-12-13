@@ -9,7 +9,6 @@ fn main() {
     let mut eof = false;
     while !eof {
         let (n1, n2, n3, n4) = parser.read(&mut eof);
-        translator.create_index();
         match (n1, n2, n3, n4) {
             (0x0A, _, _, _) => translator.mov_i_addr(n2, n3, n4),
             (0x0C, _, _, _) => translator.rand_bitwise_and(n2, n3, n4),
@@ -25,7 +24,6 @@ fn main() {
                 eof = true;
             }
         }
-        translator.increment_index_pointer();
     }
 
     println!("{}", translator);
